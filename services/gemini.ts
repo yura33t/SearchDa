@@ -6,15 +6,20 @@ export interface StreamCallbacks {
   onSources: (sources: SearchSource[]) => void;
 }
 
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
 export const performSearchStreaming = async (
   query: string,
-  callbacks: StreamCallbacks
+  callbacks: StreamCallbacks,
+  retryCount = 0
 ): Promise<void> => {
-  const apiKey = process.env.API_KEY;
+  // Priority: 1. LocalStorage (User Key) 2. Environment (Dev Key)
+  const userKey = localStorage.getItem('searchda_custom_key');
+  const envKey = process.env.API_KEY;
+  const apiKey = userKey || envKey;
 
   if (!apiKey || apiKey === "undefined" || apiKey === "null" || apiKey === "") {
-    console.error("API_KEY is not configured.");
-    throw new Error("Missing API Key. Please configure it in your dashboard.");
+    throw new Error("API Key not found. Please add your Gemini API Key in Settings.");
   }
 
   const ai = new GoogleGenAI({ apiKey });
@@ -54,22 +59,27 @@ export const performSearchStreaming = async (
       }
     }
   } catch (error: any) {
-    console.error("Gemini API Error:", error);
+    console.error(`Gemini API Error (Attempt ${retryCount + 1}):`, error);
     
     const msg = error?.message || "";
-    const status = error?.status || "";
+    const isQuotaError = msg.includes("429") || msg.includes("RESOURCE_EXHAUSTED");
 
-    // 429 Error specifically
-    if (msg.includes("429") || msg.includes("RESOURCE_EXHAUSTED") || status === "RESOURCE_EXHAUSTED") {
-      throw new Error("Лимит запросов исчерпан. Подождите 1 минуту или смените API ключ (Quota exceeded).");
+    // Retry logic for Quota errors (max 2 retries)
+    if (isQuotaError && retryCount < 2) {
+      const delay = (retryCount + 1) * 2500; // 2.5s, 5s
+      console.log(`Quota hit. Retrying in ${delay}ms...`);
+      await sleep(delay);
+      return performSearchStreaming(query, callbacks, retryCount + 1);
+    }
+
+    if (isQuotaError) {
+      throw new Error("Лимит запросов исчерпан. Подождите минуту или используйте свой API ключ в настройках.");
     } 
     
-    if (msg.includes("API_KEY_INVALID")) {
-      throw new Error("Неверный API ключ. Проверьте настройки.");
-    } else if (msg.includes("location is not supported")) {
-      throw new Error("Gemini AI недоступен в регионе вашего сервера.");
+    if (msg.includes("API_KEY_INVALID") || msg.includes("invalid")) {
+      throw new Error("Неверный API ключ. Проверьте настройки или API_KEY в Render.");
     }
     
-    throw new Error("Сервис поиска временно недоступен. Попробуйте позже.");
+    throw new Error(msg.includes("location") ? "Регион не поддерживается" : "Ошибка сервиса. Попробуйте еще раз.");
   }
 };

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import Header from './components/Header';
 import SearchBar from './components/SearchBar';
@@ -18,6 +17,7 @@ const App: React.FC = () => {
   const [streamingSources, setStreamingSources] = useState<SearchSource[]>([]);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [browsingUrl, setBrowsingUrl] = useState<string | null>(null);
+  const [isUsingCustomKey, setIsUsingCustomKey] = useState(false);
   const [stealthMode, setStealthMode] = useState(() => {
     return localStorage.getItem('searchda_stealth') === 'true';
   });
@@ -25,13 +25,13 @@ const App: React.FC = () => {
   useEffect(() => {
     const saved = localStorage.getItem('searchda_history');
     if (saved) setHistory(JSON.parse(saved));
+    setIsUsingCustomKey(!!localStorage.getItem('searchda_custom_key'));
   }, []);
 
   useEffect(() => {
     localStorage.setItem('searchda_stealth', stealthMode.toString());
     document.body.style.backgroundColor = stealthMode ? '#000000' : '#f8fafc';
     
-    // Fix mobile viewport height issues
     const setVh = () => {
       let vh = window.innerHeight * 0.01;
       document.documentElement.style.setProperty('--vh', `${vh}px`);
@@ -93,6 +93,7 @@ const App: React.FC = () => {
     } catch (err: any) {
       setError(err.message || 'Connection lost');
       setIsLoading(false);
+      // Don't clear text so user can see what was generated before error
     }
   }, [history]);
 
@@ -127,6 +128,13 @@ const App: React.FC = () => {
               <h1 className="text-4xl md:text-7xl font-black tracking-tighter mb-4 md:mb-6">
                 Search<span className={`${stealthMode ? 'text-[#00FF00] drop-shadow-[0_0_10px_#00FF00]' : 'text-[#00CC00]'}`}>Da</span>
               </h1>
+              
+              {isUsingCustomKey && (
+                <div className="mb-6 inline-flex items-center px-3 py-1 bg-[#00FF00]/10 border border-[#00FF00]/20 rounded-full">
+                  <span className="text-[8px] font-black text-[#00FF00] uppercase tracking-widest">Using Custom Node</span>
+                </div>
+              )}
+
               <p className={`text-xs md:text-xl mb-8 md:mb-12 max-w-sm md:max-w-md mx-auto leading-relaxed transition-colors duration-500 ${stealthMode ? 'text-zinc-500' : 'text-gray-400'}`}>
                 {stealthMode ? 'Secure Dark Node Active. V1.0 Beta.' : 'The next generation of intelligent discovery.'}
               </p>
@@ -181,24 +189,24 @@ const App: React.FC = () => {
                     <div className="space-y-4">
                       <div className={`h-48 md:h-80 rounded-[2rem] animate-pulse ${stealthMode ? 'bg-zinc-900/50' : 'bg-white border border-gray-100'}`}></div>
                     </div>
-                  ) : error ? (
-                    <div className={`p-10 border-2 rounded-[2rem] text-center ${
-                      stealthMode ? 'bg-red-500/5 border-red-500/20' : 'bg-red-50 border-red-100'
-                    }`}>
-                      <i className="fas fa-exclamation-triangle text-red-500 mb-4 text-2xl"></i>
-                      <p className="text-red-500 text-sm font-black uppercase tracking-widest mb-6">{error}</p>
-                      <button 
-                        onClick={() => handleSearch(currentQuery)} 
-                        className={`px-8 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
-                          stealthMode ? 'bg-zinc-900 text-white hover:bg-zinc-800' : 'bg-black text-white hover:scale-105'
-                        }`}
-                      >
-                        Try Again
-                      </button>
-                    </div>
                   ) : (
                     <div className="space-y-6 md:space-y-10">
                       {streamingText && <AIAnswer answer={streamingText} stealthMode={stealthMode} />}
+                      
+                      {error && (
+                        <div className={`p-6 border-2 rounded-2xl text-center ${
+                          stealthMode ? 'bg-red-500/5 border-red-500/20' : 'bg-red-50 border-red-100'
+                        }`}>
+                          <p className="text-red-500 text-[10px] font-black uppercase tracking-widest">{error}</p>
+                          <button 
+                            onClick={() => handleSearch(currentQuery)} 
+                            className="mt-4 px-6 py-2 bg-red-500 text-white text-[9px] font-black uppercase tracking-widest rounded-lg"
+                          >
+                            Retry Now
+                          </button>
+                        </div>
+                      )}
+
                       {streamingSources.length > 0 && <ResultList sources={streamingSources} stealthMode={stealthMode} />}
                     </div>
                   )}
@@ -214,9 +222,9 @@ const App: React.FC = () => {
       }`}>
         <p className="text-[9px] font-black uppercase tracking-[0.4em]">SearchDa Engine © 2025</p>
         <div className="flex items-center justify-center space-x-4 mt-4">
-          <span className="text-[8px] font-mono opacity-50">VER: 1.0.0-BETA</span>
+          <span className="text-[8px] font-mono opacity-50">VER: 1.1.2</span>
           <span className="w-1 h-1 rounded-full bg-current opacity-20"></span>
-          <span className="text-[8px] font-mono opacity-50">NODE: CLOUD_SECURE</span>
+          <span className="text-[8px] font-mono opacity-50">NODE: {isUsingCustomKey ? 'PERSONAL' : 'SHARED'}</span>
         </div>
       </footer>
     </div>
