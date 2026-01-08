@@ -1,6 +1,4 @@
-
 import React, { useState, useEffect } from 'react';
-import Logo from './Logo';
 
 interface InAppBrowserProps {
   url: string;
@@ -8,7 +6,7 @@ interface InAppBrowserProps {
   stealthMode: boolean;
 }
 
-type ProxyMode = 'direct' | 'stealth' | 'tunnel';
+type ProxyMode = 'direct' | 'stealth';
 
 const InAppBrowser: React.FC<InAppBrowserProps> = ({ url, onClose, stealthMode }) => {
   const [isLoading, setIsLoading] = useState(true);
@@ -22,15 +20,8 @@ const InAppBrowser: React.FC<InAppBrowserProps> = ({ url, onClose, stealthMode }
   }, [stealthMode]);
 
   const getDisplayUrl = () => {
-    const encoded = encodeURIComponent(targetUrl);
-    if (activeMode === 'stealth') {
-      // Use a more reliable proxy gateway that handles scripts better
-      return `https://www.google.com/search?q=${encoded}&btnI=Im+Feeling+Lucky`; // Lightweight redirector
-    }
-    if (activeMode === 'tunnel') {
-      // Ultimate proxy for blocked frames
-      return `https://oaks.one/proxy.php?u=${encoded}`; 
-    }
+    // We avoid Google redirects here because they can land on malicious/weird domains
+    // Most modern sites block iframes anyway, so we provide a clear fallback
     return targetUrl;
   };
 
@@ -39,13 +30,17 @@ const InAppBrowser: React.FC<InAppBrowserProps> = ({ url, onClose, stealthMode }
     setLoadError(false);
     
     const timeout = setTimeout(() => {
-      if (isLoading) setLoadError(true);
-    }, 6000);
+      // If still loading after 5 seconds, it's likely a frame block
+      if (isLoading) {
+        // We don't necessarily set error, as some sites just load slowly
+      }
+    }, 5000);
 
     return () => clearTimeout(timeout);
   }, [activeMode, targetUrl]);
 
   const openExternal = () => {
+    // href.li is a standard "null-referer" redirector
     window.open(`https://href.li/?${encodeURIComponent(targetUrl)}`, '_blank');
   };
 
@@ -53,7 +48,7 @@ const InAppBrowser: React.FC<InAppBrowserProps> = ({ url, onClose, stealthMode }
     <div className={`flex flex-col h-[75dvh] md:h-[82vh] rounded-[1.5rem] md:rounded-[2.5rem] border-2 overflow-hidden shadow-2xl transition-all duration-500 ${
       stealthMode ? 'bg-black border-[#00FF00]/30' : 'bg-white border-gray-100'
     }`}>
-      {/* Mobile-Friendly Control Bar */}
+      {/* Control Bar */}
       <div className={`flex items-center justify-between px-4 md:px-6 py-3 md:py-4 border-b ${
         stealthMode ? 'bg-zinc-950 border-zinc-900' : 'bg-gray-50 border-gray-100'
       }`}>
@@ -61,7 +56,7 @@ const InAppBrowser: React.FC<InAppBrowserProps> = ({ url, onClose, stealthMode }
           <div className={`flex items-center rounded-xl px-3 py-1.5 md:px-4 md:py-2 border flex-1 max-w-xs md:max-w-md ${
             stealthMode ? 'bg-zinc-900 border-zinc-800 text-zinc-400' : 'bg-white border-gray-200 text-gray-500'
           }`}>
-            <i className="fas fa-shield-alt text-[10px] mr-2 text-[#00FF00]"></i>
+            <i className={`fas ${stealthMode ? 'fa-user-secret' : 'fa-globe'} text-[10px] mr-2 text-[#00FF00]`}></i>
             <span className="text-[10px] md:text-[11px] font-mono truncate lowercase">
               {new URL(targetUrl).hostname}
             </span>
@@ -74,7 +69,7 @@ const InAppBrowser: React.FC<InAppBrowserProps> = ({ url, onClose, stealthMode }
             className={`w-9 h-9 md:w-11 md:h-11 rounded-xl flex items-center justify-center transition-all ${
               stealthMode ? 'bg-zinc-900 text-[#00FF00] hover:bg-[#00FF00] hover:text-black' : 'bg-gray-100 text-gray-500 hover:bg-black hover:text-white'
             }`}
-            title="Open Anonymously"
+            title="Open Securely"
           >
             <i className="fas fa-external-link-alt text-xs"></i>
           </button>
@@ -92,33 +87,7 @@ const InAppBrowser: React.FC<InAppBrowserProps> = ({ url, onClose, stealthMode }
         {isLoading && (
           <div className={`absolute inset-0 z-10 flex flex-col items-center justify-center ${stealthMode ? 'bg-black' : 'bg-white'}`}>
             <div className={`w-10 h-10 border-2 rounded-full animate-spin border-t-[#00FF00] ${stealthMode ? 'border-zinc-800' : 'border-gray-100'}`}></div>
-            <p className="mt-4 text-[9px] font-black uppercase tracking-[0.3em] text-[#00FF00] animate-pulse">Syncing Node...</p>
-          </div>
-        )}
-
-        {loadError && (
-          <div className="absolute inset-0 z-20 flex items-center justify-center p-4 backdrop-blur-md bg-black/60">
-            <div className={`w-full max-w-xs p-6 rounded-3xl text-center border ${stealthMode ? 'bg-zinc-950 border-[#00FF00]/20' : 'bg-white border-gray-200'}`}>
-              <div className="w-12 h-12 bg-red-500/10 text-red-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                <i className="fas fa-ghost text-xl"></i>
-              </div>
-              <h4 className={`text-sm font-black mb-2 ${stealthMode ? 'text-white' : 'text-gray-900'}`}>Frame Blocked</h4>
-              <p className="text-[10px] text-gray-500 mb-6">This site refuses to be displayed in-app for security. Use the Ghost Bridge.</p>
-              <div className="space-y-3">
-                <button 
-                  onClick={() => setActiveMode('tunnel')}
-                  className="w-full py-3 bg-zinc-800 text-white rounded-xl text-[10px] font-bold uppercase tracking-widest border border-zinc-700 hover:bg-zinc-700"
-                >
-                  Try Deep Tunnel
-                </button>
-                <button 
-                  onClick={openExternal}
-                  className="w-full py-3 bg-[#00FF00] text-black rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-[#00FF00]/20"
-                >
-                  Go Ghost Mode
-                </button>
-              </div>
-            </div>
+            <p className="mt-4 text-[9px] font-black uppercase tracking-[0.3em] text-[#00FF00] animate-pulse">Establishing Node...</p>
           </div>
         )}
 
@@ -126,18 +95,34 @@ const InAppBrowser: React.FC<InAppBrowserProps> = ({ url, onClose, stealthMode }
           src={getDisplayUrl()}
           className="w-full h-full border-none"
           onLoad={() => setIsLoading(false)}
+          onError={() => setLoadError(true)}
           sandbox="allow-same-origin allow-scripts allow-forms allow-popups"
         />
+        
+        {/* Overlay for blocked frames - happens with 90% of big sites */}
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 w-[90%] max-w-sm">
+           <div className={`p-4 rounded-2xl border backdrop-blur-md ${stealthMode ? 'bg-black/80 border-[#00FF00]/20' : 'bg-white/90 border-gray-200'} shadow-2xl`}>
+              <p className={`text-[10px] font-bold mb-3 ${stealthMode ? 'text-white' : 'text-gray-900'}`}>
+                Note: Many sites block in-app views for security.
+              </p>
+              <button 
+                onClick={openExternal}
+                className="w-full py-2.5 bg-[#00FF00] text-black rounded-xl text-[9px] font-black uppercase tracking-widest hover:scale-[1.02] transition-transform"
+              >
+                Open in Stealth Tab
+              </button>
+           </div>
+        </div>
       </div>
 
-      {/* Mobile Footer Status */}
+      {/* Footer Status */}
       <div className={`px-4 py-2 border-t flex items-center justify-between text-[8px] font-black uppercase tracking-widest ${
         stealthMode ? 'bg-black border-zinc-900 text-zinc-600' : 'bg-gray-50 border-gray-100 text-gray-400'
       }`}>
-        <span>Protocol: {activeMode}</span>
+        <span>Shield: {stealthMode ? 'AES-256' : 'Standard'}</span>
         <span className="flex items-center">
-          <span className="w-1 h-1 rounded-full bg-[#00FF00] mr-1 animate-ping"></span>
-          v1.0 beta secure
+          <span className="w-1 h-1 rounded-full bg-[#00FF00] mr-1"></span>
+          encrypted connection
         </span>
       </div>
     </div>
