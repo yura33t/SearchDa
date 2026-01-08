@@ -12,6 +12,7 @@ const InAppBrowser: React.FC<InAppBrowserProps> = ({ url, onClose, stealthMode }
   const [isLoading, setIsLoading] = useState(true);
   const [activeMode, setActiveMode] = useState<ProxyMode>(stealthMode ? 'stealth' : 'direct');
   const [loadError, setLoadError] = useState(false);
+  const [showNotice, setShowNotice] = useState(true);
   
   const targetUrl = url.startsWith('http') ? url : `https://${url}`;
 
@@ -19,9 +20,16 @@ const InAppBrowser: React.FC<InAppBrowserProps> = ({ url, onClose, stealthMode }
     if (stealthMode) setActiveMode('stealth');
   }, [stealthMode]);
 
+  // Handle auto-hiding the security notice
+  useEffect(() => {
+    setShowNotice(true);
+    const timer = setTimeout(() => {
+      setShowNotice(false);
+    }, 6000); // 6 seconds visibility
+    return () => clearTimeout(timer);
+  }, [targetUrl]);
+
   const getDisplayUrl = () => {
-    // We avoid Google redirects here because they can land on malicious/weird domains
-    // Most modern sites block iframes anyway, so we provide a clear fallback
     return targetUrl;
   };
 
@@ -30,9 +38,8 @@ const InAppBrowser: React.FC<InAppBrowserProps> = ({ url, onClose, stealthMode }
     setLoadError(false);
     
     const timeout = setTimeout(() => {
-      // If still loading after 5 seconds, it's likely a frame block
       if (isLoading) {
-        // We don't necessarily set error, as some sites just load slowly
+        // Site might be slow or blocking frames
       }
     }, 5000);
 
@@ -40,7 +47,6 @@ const InAppBrowser: React.FC<InAppBrowserProps> = ({ url, onClose, stealthMode }
   }, [activeMode, targetUrl]);
 
   const openExternal = () => {
-    // href.li is a standard "null-referer" redirector
     window.open(`https://href.li/?${encodeURIComponent(targetUrl)}`, '_blank');
   };
 
@@ -99,20 +105,30 @@ const InAppBrowser: React.FC<InAppBrowserProps> = ({ url, onClose, stealthMode }
           sandbox="allow-same-origin allow-scripts allow-forms allow-popups"
         />
         
-        {/* Overlay for blocked frames - happens with 90% of big sites */}
-        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 w-[90%] max-w-sm">
-           <div className={`p-4 rounded-2xl border backdrop-blur-md ${stealthMode ? 'bg-black/80 border-[#00FF00]/20' : 'bg-white/90 border-gray-200'} shadow-2xl`}>
-              <p className={`text-[10px] font-bold mb-3 ${stealthMode ? 'text-white' : 'text-gray-900'}`}>
-                Note: Many sites block in-app views for security.
-              </p>
-              <button 
-                onClick={openExternal}
-                className="w-full py-2.5 bg-[#00FF00] text-black rounded-xl text-[9px] font-black uppercase tracking-widest hover:scale-[1.02] transition-transform"
-              >
-                Open in Stealth Tab
-              </button>
-           </div>
-        </div>
+        {/* Overlay for blocked frames with auto-hide logic */}
+        {showNotice && (
+          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 w-[90%] max-w-sm animate-in fade-in slide-in-from-bottom-4 duration-700">
+             <div className={`p-4 rounded-2xl border backdrop-blur-md shadow-2xl relative ${
+               stealthMode ? 'bg-black/80 border-[#00FF00]/20' : 'bg-white/90 border-gray-200'
+             }`}>
+                <button 
+                  onClick={() => setShowNotice(false)}
+                  className="absolute top-2 right-2 text-[10px] opacity-30 hover:opacity-100 transition-opacity"
+                >
+                  <i className="fas fa-times"></i>
+                </button>
+                <p className={`text-[10px] font-bold mb-3 ${stealthMode ? 'text-white' : 'text-gray-900'}`}>
+                  Note: Many sites block in-app views for security.
+                </p>
+                <button 
+                  onClick={openExternal}
+                  className="w-full py-2.5 bg-[#00FF00] text-black rounded-xl text-[9px] font-black uppercase tracking-widest hover:scale-[1.02] transition-transform"
+                >
+                  Open in Stealth Tab
+                </button>
+             </div>
+          </div>
+        )}
       </div>
 
       {/* Footer Status */}
