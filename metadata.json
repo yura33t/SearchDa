@@ -1,5 +1,8 @@
 {
-  "name": "SearchDa",
-  "description": "A powerful AI-driven search engine that provides intelligent answers with real-time web grounding and source verification.",
-  "requestFramePermissions": []
+  "name": "SearchDa AI",
+  "description": "Professional AI Search Engine with Google Search grounding and Stealth Mode for anonymous browsing.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
 }
