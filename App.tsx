@@ -17,7 +17,6 @@ const App: React.FC = () => {
   const [streamingSources, setStreamingSources] = useState<SearchSource[]>([]);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [browsingUrl, setBrowsingUrl] = useState<string | null>(null);
-  const [isUsingCustomKey, setIsUsingCustomKey] = useState(false);
   const [stealthMode, setStealthMode] = useState(() => {
     return localStorage.getItem('searchda_stealth') === 'true';
   });
@@ -25,48 +24,31 @@ const App: React.FC = () => {
   useEffect(() => {
     const saved = localStorage.getItem('searchda_history');
     if (saved) setHistory(JSON.parse(saved));
-    setIsUsingCustomKey(!!localStorage.getItem('searchda_custom_key'));
   }, []);
 
   useEffect(() => {
     localStorage.setItem('searchda_stealth', stealthMode.toString());
     document.body.style.backgroundColor = stealthMode ? '#000000' : '#f8fafc';
-    
-    const setVh = () => {
-      let vh = window.innerHeight * 0.01;
-      document.documentElement.style.setProperty('--vh', `${vh}px`);
-    };
-    window.addEventListener('resize', setVh);
-    setVh();
-    return () => window.removeEventListener('resize', setVh);
   }, [stealthMode]);
-
-  const isUrl = (text: string) => {
-    const trimmed = text.trim();
-    const hasProtocol = /^(https?:\/\/)/i.test(trimmed);
-    const hasWww = /^www\./i.test(trimmed);
-    const hasTld = /\.(com|net|org|ru|io|me|info|biz|ua|kz|by|gov|us|uk|tv|xyz)$/i.test(trimmed);
-    return (hasProtocol || hasWww || (trimmed.includes('.') && hasTld)) && !trimmed.includes(' ');
-  };
 
   const handleSearch = useCallback(async (query: string) => {
     const trimmedQuery = query.trim();
     if (!trimmedQuery) return;
 
     setCurrentQuery(trimmedQuery);
-
-    if (isUrl(trimmedQuery)) {
-      setBrowsingUrl(trimmedQuery);
-      setIsLanding(false);
-      return;
-    }
-
+    setIsLanding(false);
     setIsLoading(true);
     setError(null);
-    setIsLanding(false);
-    setBrowsingUrl(null);
     setStreamingText("");
     setStreamingSources([]);
+    setBrowsingUrl(null);
+
+    // Simple URL detection
+    if (/^(https?:\/\/|www\.)[^\s]+/.test(trimmedQuery)) {
+      setBrowsingUrl(trimmedQuery.startsWith('http') ? trimmedQuery : `https://${trimmedQuery}`);
+      setIsLoading(false);
+      return;
+    }
 
     try {
       await performSearchStreaming(trimmedQuery, {
@@ -84,18 +66,18 @@ const App: React.FC = () => {
         query: trimmedQuery,
         timestamp: Date.now(),
       };
-      const updatedHistory = [newItem, ...history.slice(0, 5)].filter(
-        (item, index, self) => index === self.findIndex((t) => t.query === item.query)
-      );
-      setHistory(updatedHistory);
-      localStorage.setItem('searchda_history', JSON.stringify(updatedHistory));
+      
+      setHistory(prev => {
+        const next = [newItem, ...prev.filter(i => i.query !== trimmedQuery)].slice(0, 6);
+        localStorage.setItem('searchda_history', JSON.stringify(next));
+        return next;
+      });
       
     } catch (err: any) {
-      setError(err.message || 'Connection lost');
+      setError(err.message || 'Ошибка подключения к ИИ');
       setIsLoading(false);
-      // Don't clear text so user can see what was generated before error
     }
-  }, [history]);
+  }, []);
 
   const resetToHome = () => {
     setIsLanding(true);
@@ -104,11 +86,10 @@ const App: React.FC = () => {
     setBrowsingUrl(null);
     setCurrentQuery("");
     setError(null);
-    setIsLoading(false);
   };
 
   return (
-    <div className={`min-h-screen flex flex-col transition-all duration-700 ${stealthMode ? 'bg-[#000000] text-white' : 'bg-slate-50 text-slate-900'}`}>
+    <div className={`min-h-screen flex flex-col transition-all duration-700 ${stealthMode ? 'bg-black text-white' : 'bg-slate-50 text-slate-900'}`}>
       <Header 
         onHome={resetToHome} 
         compact={!isLanding} 
@@ -116,45 +97,28 @@ const App: React.FC = () => {
         onToggleStealth={() => setStealthMode(!stealthMode)}
       />
 
-      <main className={`flex-grow flex flex-col ${isLanding ? 'justify-center py-6 md:py-10' : 'pt-4 md:pt-10'}`}>
+      <main className={`flex-grow flex flex-col ${isLanding ? 'justify-center py-10' : 'pt-6'}`}>
         <div className="container mx-auto px-4 max-w-4xl">
           {isLanding ? (
             <div className="text-center animate-in fade-in zoom-in duration-700">
-              <div className="flex justify-center mb-6 md:mb-10" onClick={resetToHome}>
-                <div className={`transition-all duration-700 ${stealthMode ? 'scale-90 md:scale-110 drop-shadow-[0_0_30px_rgba(0,255,0,0.4)]' : 'hover:scale-105'}`}>
-                  <Logo size={window.innerWidth < 768 ? 'sm' : 'lg'} />
-                </div>
+              <div className="flex justify-center mb-10">
+                <Logo size="lg" />
               </div>
-              <h1 className="text-4xl md:text-7xl font-black tracking-tighter mb-4 md:mb-6">
-                Search<span className={`${stealthMode ? 'text-[#00FF00] drop-shadow-[0_0_10px_#00FF00]' : 'text-[#00CC00]'}`}>Da</span>
+              <h1 className="text-5xl md:text-7xl font-black tracking-tighter mb-6">
+                Search<span className={stealthMode ? 'text-[#00FF00]' : 'text-[#00CC00]'}>Da</span>
               </h1>
-              
-              {isUsingCustomKey && (
-                <div className="mb-6 inline-flex items-center px-3 py-1 bg-[#00FF00]/10 border border-[#00FF00]/20 rounded-full">
-                  <span className="text-[8px] font-black text-[#00FF00] uppercase tracking-widest">Using Custom Node</span>
-                </div>
-              )}
-
-              <p className={`text-xs md:text-xl mb-8 md:mb-12 max-w-sm md:max-w-md mx-auto leading-relaxed transition-colors duration-500 ${stealthMode ? 'text-zinc-500' : 'text-gray-400'}`}>
-                {stealthMode ? 'Secure Dark Node Active. V1.0 Beta.' : 'The next generation of intelligent discovery.'}
-              </p>
-              
               <SearchBar onSearch={handleSearch} isLoading={isLoading} />
-
+              
               {history.length > 0 && (
-                <div className="mt-12 md:mt-20 text-left max-w-xl mx-auto px-2">
-                  <h3 className={`text-[9px] font-black uppercase tracking-[0.2em] mb-5 flex items-center ${stealthMode ? 'text-zinc-800' : 'text-gray-300'}`}>
-                    <i className="fas fa-history mr-2"></i> Last Sessions
-                  </h3>
+                <div className="mt-16 text-left max-w-xl mx-auto">
+                  <h3 className={`text-[10px] font-black uppercase tracking-widest mb-4 opacity-50`}>Recent Searches</h3>
                   <div className="flex flex-wrap gap-2">
                     {history.map((item) => (
                       <button
                         key={item.id}
                         onClick={() => handleSearch(item.query)}
-                        className={`px-4 py-2 rounded-xl border text-[11px] font-bold transition-all duration-300 ${
-                          stealthMode 
-                            ? 'bg-zinc-950 border-zinc-900 text-zinc-500 hover:text-[#00FF00] hover:border-[#00FF00]/30 hover:bg-zinc-900' 
-                            : 'bg-white border-gray-100 text-gray-500 hover:border-black hover:bg-gray-50'
+                        className={`px-4 py-2 rounded-xl border text-xs font-bold transition-all ${
+                          stealthMode ? 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white' : 'bg-white border-gray-100 text-gray-500 hover:border-black'
                         }`}
                       >
                         {item.query}
@@ -165,68 +129,35 @@ const App: React.FC = () => {
               )}
             </div>
           ) : (
-            <div className="space-y-4 md:space-y-8 pb-20">
+            <div className="space-y-6 pb-20">
               {browsingUrl ? (
-                <div className="flex flex-col space-y-4 animate-in slide-in-from-bottom-8 duration-500">
-                  <InAppBrowser 
-                    url={browsingUrl} 
-                    onClose={() => setBrowsingUrl(null)} 
-                    stealthMode={stealthMode}
-                  />
-                </div>
+                <InAppBrowser url={browsingUrl} onClose={() => setBrowsingUrl(null)} stealthMode={stealthMode} />
               ) : (
-                <div className="animate-in slide-in-from-bottom-8 duration-500">
-                  <div className="mb-8">
-                    <SearchBar 
-                      onSearch={handleSearch} 
-                      isLoading={isLoading} 
-                      initialValue={currentQuery} 
-                      variant="small" 
-                    />
-                  </div>
-
-                  {isLoading && streamingText === "" ? (
-                    <div className="space-y-4">
-                      <div className={`h-48 md:h-80 rounded-[2rem] animate-pulse ${stealthMode ? 'bg-zinc-900/50' : 'bg-white border border-gray-100'}`}></div>
-                    </div>
-                  ) : (
-                    <div className="space-y-6 md:space-y-10">
-                      {streamingText && <AIAnswer answer={streamingText} stealthMode={stealthMode} />}
-                      
-                      {error && (
-                        <div className={`p-6 border-2 rounded-2xl text-center ${
-                          stealthMode ? 'bg-red-500/5 border-red-500/20' : 'bg-red-50 border-red-100'
-                        }`}>
-                          <p className="text-red-500 text-[10px] font-black uppercase tracking-widest">{error}</p>
-                          <button 
-                            onClick={() => handleSearch(currentQuery)} 
-                            className="mt-4 px-6 py-2 bg-red-500 text-white text-[9px] font-black uppercase tracking-widest rounded-lg"
-                          >
-                            Retry Now
-                          </button>
-                        </div>
-                      )}
-
-                      {streamingSources.length > 0 && <ResultList sources={streamingSources} stealthMode={stealthMode} />}
+                <>
+                  <SearchBar onSearch={handleSearch} isLoading={isLoading} initialValue={currentQuery} variant="small" />
+                  
+                  {isLoading && !streamingText && (
+                    <div className="space-y-4 pt-10">
+                      <div className={`h-64 rounded-3xl animate-pulse ${stealthMode ? 'bg-zinc-900' : 'bg-white'}`}></div>
                     </div>
                   )}
-                </div>
+
+                  {streamingText && <AIAnswer answer={streamingText} stealthMode={stealthMode} />}
+                  
+                  {error && (
+                    <div className="p-8 bg-red-500/10 border border-red-500/20 rounded-3xl text-center">
+                      <p className="text-red-500 font-bold mb-4">{error}</p>
+                      <button onClick={() => handleSearch(currentQuery)} className="px-6 py-2 bg-red-500 text-white rounded-xl text-xs font-black uppercase">Retry</button>
+                    </div>
+                  )}
+
+                  <ResultList sources={streamingSources} stealthMode={stealthMode} />
+                </>
               )}
             </div>
           )}
         </div>
       </main>
-
-      <footer className={`py-10 md:py-16 border-t text-center transition-colors duration-500 ${
-        stealthMode ? 'bg-black border-zinc-900 text-zinc-800' : 'bg-white border-gray-100 text-gray-300'
-      }`}>
-        <p className="text-[9px] font-black uppercase tracking-[0.4em]">SearchDa Engine © 2025</p>
-        <div className="flex items-center justify-center space-x-4 mt-4">
-          <span className="text-[8px] font-mono opacity-50">VER: 1.1.2</span>
-          <span className="w-1 h-1 rounded-full bg-current opacity-20"></span>
-          <span className="text-[8px] font-mono opacity-50">NODE: {isUsingCustomKey ? 'PERSONAL' : 'SHARED'}</span>
-        </div>
-      </footer>
     </div>
   );
 };

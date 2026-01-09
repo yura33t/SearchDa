@@ -1,4 +1,3 @@
-
 import React from 'react';
 
 interface LogoProps {
@@ -26,5 +25,4 @@ const Logo: React.FC<LogoProps> = ({ size = 'sm' }) => {
   );
 };
 
-// Add missing default export
 export default Logo;

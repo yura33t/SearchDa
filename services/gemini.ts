@@ -6,36 +6,36 @@ export interface StreamCallbacks {
   onSources: (sources: SearchSource[]) => void;
 }
 
-const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-
 export const performSearchStreaming = async (
   query: string,
-  callbacks: StreamCallbacks,
-  retryCount = 0
+  callbacks: StreamCallbacks
 ): Promise<void> => {
-  // Priority: 1. LocalStorage (User Key) 2. Environment (Dev Key)
+  // Use the API key directly as per system instructions
+  const apiKey = process.env.API_KEY;
   const userKey = localStorage.getItem('searchda_custom_key');
-  const envKey = process.env.API_KEY;
-  const apiKey = userKey || envKey;
+  const finalKey = userKey || apiKey;
 
-  if (!apiKey || apiKey === "undefined" || apiKey === "null" || apiKey === "") {
-    throw new Error("API Key not found. Please add your Gemini API Key in Settings.");
+  if (!finalKey || finalKey === "undefined" || finalKey === "null") {
+    throw new Error("API Key is missing. Please set it in Settings.");
   }
 
-  const ai = new GoogleGenAI({ apiKey });
+  const ai = new GoogleGenAI({ apiKey: finalKey });
   
   try {
-    const result = await ai.models.generateContentStream({
+    const response = await ai.models.generateContentStream({
       model: "gemini-3-flash-preview",
-      contents: [{ parts: [{ text: query }] }],
+      contents: [{ role: "user", parts: [{ text: query }] }],
       config: {
         tools: [{ googleSearch: {} }],
+        // Disable thinking for faster search results
         thinkingConfig: { thinkingBudget: 0 },
       },
     });
 
     let fullText = "";
-    for await (const chunk of result) {
+    let allSources: SearchSource[] = [];
+
+    for await (const chunk of response) {
       if (chunk.text) {
         fullText += chunk.text;
         callbacks.onText(fullText);
@@ -43,43 +43,41 @@ export const performSearchStreaming = async (
       
       const metadata = chunk.candidates?.[0]?.groundingMetadata;
       if (metadata?.groundingChunks) {
-        const sources: SearchSource[] = metadata.groundingChunks
+        const newSources: SearchSource[] = metadata.groundingChunks
           .filter((c: any) => c.web)
           .map((c: any) => ({
-            title: c.web.title || "Source",
+            title: c.web.title || "Untitled Source",
             uri: c.web.uri,
-          }))
-          .filter((source: SearchSource, index: number, self: SearchSource[]) =>
-            index === self.findIndex((t) => t.uri === source.uri)
-          );
+          }));
         
-        if (sources.length > 0) {
-          callbacks.onSources(sources);
+        // Merge and de-duplicate sources
+        const merged = [...allSources, ...newSources];
+        allSources = merged.filter((source, index, self) =>
+          index === self.findIndex((t) => t.uri === source.uri)
+        );
+        
+        if (allSources.length > 0) {
+          callbacks.onSources(allSources);
         }
       }
     }
+
+    if (!fullText && !allSources.length) {
+      throw new Error("No results found for this query.");
+    }
+
   } catch (error: any) {
-    console.error(`Gemini API Error (Attempt ${retryCount + 1}):`, error);
+    console.error("Search error:", error);
     
-    const msg = error?.message || "";
-    const isQuotaError = msg.includes("429") || msg.includes("RESOURCE_EXHAUSTED");
-
-    // Retry logic for Quota errors (max 2 retries)
-    if (isQuotaError && retryCount < 2) {
-      const delay = (retryCount + 1) * 2500; // 2.5s, 5s
-      console.log(`Quota hit. Retrying in ${delay}ms...`);
-      await sleep(delay);
-      return performSearchStreaming(query, callbacks, retryCount + 1);
-    }
-
-    if (isQuotaError) {
-      throw new Error("Лимит запросов исчерпан. Подождите минуту или используйте свой API ключ в настройках.");
-    } 
-    
-    if (msg.includes("API_KEY_INVALID") || msg.includes("invalid")) {
-      throw new Error("Неверный API ключ. Проверьте настройки или API_KEY в Render.");
+    const message = error?.message || "";
+    if (message.includes("429") || message.includes("RESOURCE_EXHAUSTED")) {
+      throw new Error("Лимит запросов исчерпан. Попробуйте через 30-60 секунд.");
+    } else if (message.includes("API_KEY_INVALID")) {
+      throw new Error("Ошибка ключа доступа. Проверьте настройки.");
+    } else if (message.includes("location not supported")) {
+      throw new Error("Сервис недоступен в вашем регионе (VPN может помочь).");
     }
     
-    throw new Error(msg.includes("location") ? "Регион не поддерживается" : "Ошибка сервиса. Попробуйте еще раз.");
+    throw new Error(message || "Произошла непредвиденная ошибка при поиске.");
   }
 };

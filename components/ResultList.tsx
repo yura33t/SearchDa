@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { SearchSource } from '../types';
 
@@ -11,31 +10,28 @@ const ResultList: React.FC<ResultListProps> = ({ sources, stealthMode = false })
   if (sources.length === 0) return null;
 
   const getTransitionUrl = (url: string) => {
-    if (stealthMode) {
-      // Using href.li which is a faster and more reliable referrer stripper
-      return `https://href.li/?${encodeURIComponent(url)}`;
+    try {
+      if (stealthMode) {
+        return `https://href.li/?${encodeURIComponent(url)}`;
+      }
+      return url;
+    } catch (e) {
+      return url;
     }
-    return url;
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 animate-in fade-in duration-500">
       <div className="flex items-center justify-between border-b border-gray-100 pb-2">
         <div className="flex items-center space-x-2 text-gray-400">
           <i className="fas fa-stream text-xs"></i>
           <h3 className="text-[10px] font-black uppercase tracking-widest">Verified Sources</h3>
         </div>
-        {stealthMode && (
-          <div className="flex items-center space-x-1 text-[10px] font-bold text-[#00CC00] uppercase tracking-tighter">
-            <i className="fas fa-mask"></i>
-            <span>No-Referrer Routing</span>
-          </div>
-        )}
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {sources.map((source, index) => (
           <a
-            key={index}
+            key={`${source.uri}-${index}`}
             href={getTransitionUrl(source.uri)}
             target="_blank"
             rel="noopener noreferrer"
@@ -52,7 +48,7 @@ const ResultList: React.FC<ResultListProps> = ({ sources, stealthMode = false })
             </span>
             <div className="flex items-center justify-between mt-2">
               <span className="text-[10px] text-gray-400 font-mono truncate max-w-[150px]">
-                {new URL(source.uri).hostname}
+                {source.uri.includes('://') ? new URL(source.uri).hostname : 'source'}
               </span>
               <i className={`fas fa-arrow-right text-[10px] transform group-hover:translate-x-1 transition-transform ${
                 stealthMode ? 'text-[#00CC00]' : 'text-gray-300'
@@ -65,5 +61,4 @@ const ResultList: React.FC<ResultListProps> = ({ sources, stealthMode = false })
   );
 };
 
-// Add missing default export
 export default ResultList;
