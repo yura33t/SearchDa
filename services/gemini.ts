@@ -10,24 +10,29 @@ export const performSearchStreaming = async (
   query: string,
   callbacks: StreamCallbacks
 ): Promise<void> => {
-  // Use the API key directly as per system instructions
-  const apiKey = process.env.API_KEY;
+  // Use custom key from localStorage if it exists, otherwise use environment key
   const userKey = localStorage.getItem('searchda_custom_key');
-  const finalKey = userKey || apiKey;
+  const systemKey = process.env.API_KEY;
+  
+  // Clean up values that might be set as strings by build tools
+  const isInvalid = (val: string | undefined | null) => 
+    !val || val === "undefined" || val === "null" || val.trim() === "";
 
-  if (!finalKey || finalKey === "undefined" || finalKey === "null") {
-    throw new Error("API Key is missing. Please set it in Settings.");
+  const apiKey = !isInvalid(userKey) ? userKey : systemKey;
+
+  if (isInvalid(apiKey)) {
+    throw new Error("API ключ не найден. Пожалуйста, добавьте свой Gemini API ключ в настройках (иконка шестеренки в углу).");
   }
 
-  const ai = new GoogleGenAI({ apiKey: finalKey });
+  // Initialize AI client with the determined key
+  const ai = new GoogleGenAI({ apiKey: apiKey! });
   
   try {
     const response = await ai.models.generateContentStream({
       model: "gemini-3-flash-preview",
-      contents: [{ role: "user", parts: [{ text: query }] }],
+      contents: [{ parts: [{ text: query }] }],
       config: {
         tools: [{ googleSearch: {} }],
-        // Disable thinking for faster search results
         thinkingConfig: { thinkingBudget: 0 },
       },
     });
@@ -62,20 +67,23 @@ export const performSearchStreaming = async (
       }
     }
 
-    if (!fullText && !allSources.length) {
-      throw new Error("No results found for this query.");
+    if (!fullText && allSources.length === 0) {
+      throw new Error("Модель вернула пустой ответ. Попробуйте переформулировать запрос.");
     }
 
   } catch (error: any) {
-    console.error("Search error:", error);
+    console.error("Gemini Search Error:", error);
     
     const message = error?.message || "";
+    // Detailed error handling for common API issues
     if (message.includes("429") || message.includes("RESOURCE_EXHAUSTED")) {
-      throw new Error("Лимит запросов исчерпан. Попробуйте через 30-60 секунд.");
-    } else if (message.includes("API_KEY_INVALID")) {
-      throw new Error("Ошибка ключа доступа. Проверьте настройки.");
+      throw new Error("Лимит запросов исчерпан (429). Подождите 1 минуту или используйте свой API ключ в настройках.");
+    } else if (message.includes("API_KEY_INVALID") || message.includes("403") || message.includes("401")) {
+      throw new Error("Ошибка API ключа. Убедитесь, что ваш ключ активен и имеет доступ к Google Search в Google AI Studio.");
     } else if (message.includes("location not supported")) {
-      throw new Error("Сервис недоступен в вашем регионе (VPN может помочь).");
+      throw new Error("Gemini AI временно недоступен в вашем регионе. Используйте VPN или свой API ключ.");
+    } else if (message.includes("SAFETY")) {
+      throw new Error("Запрос заблокирован фильтрами безопасности. Попробуйте другой вопрос.");
     }
     
     throw new Error(message || "Произошла непредвиденная ошибка при поиске.");

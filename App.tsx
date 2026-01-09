@@ -24,6 +24,12 @@ const App: React.FC = () => {
   useEffect(() => {
     const saved = localStorage.getItem('searchda_history');
     if (saved) setHistory(JSON.parse(saved));
+    
+    // Warn developers if they haven't set up the API key correctly
+    const hasKey = localStorage.getItem('searchda_custom_key') || process.env.API_KEY;
+    if (!hasKey || hasKey === "undefined") {
+      console.warn("No API key detected. Application will rely on user-provided keys in settings.");
+    }
   }, []);
 
   useEffect(() => {
@@ -43,7 +49,7 @@ const App: React.FC = () => {
     setStreamingSources([]);
     setBrowsingUrl(null);
 
-    // Simple URL detection
+    // URL detection
     if (/^(https?:\/\/|www\.)[^\s]+/.test(trimmedQuery)) {
       setBrowsingUrl(trimmedQuery.startsWith('http') ? trimmedQuery : `https://${trimmedQuery}`);
       setIsLoading(false);
@@ -86,6 +92,7 @@ const App: React.FC = () => {
     setBrowsingUrl(null);
     setCurrentQuery("");
     setError(null);
+    setIsLoading(false);
   };
 
   return (
@@ -145,9 +152,16 @@ const App: React.FC = () => {
                   {streamingText && <AIAnswer answer={streamingText} stealthMode={stealthMode} />}
                   
                   {error && (
-                    <div className="p-8 bg-red-500/10 border border-red-500/20 rounded-3xl text-center">
+                    <div className={`p-8 border-2 rounded-3xl text-center ${
+                      stealthMode ? 'bg-red-500/5 border-red-500/20' : 'bg-red-50 border-red-100'
+                    }`}>
                       <p className="text-red-500 font-bold mb-4">{error}</p>
-                      <button onClick={() => handleSearch(currentQuery)} className="px-6 py-2 bg-red-500 text-white rounded-xl text-xs font-black uppercase">Retry</button>
+                      {error.includes("ключ") && (
+                        <p className="text-[10px] text-gray-500 mb-4 uppercase tracking-widest leading-relaxed">
+                          Нажмите на иконку шестеренки в правом верхнем углу,<br/>чтобы добавить свой персональный Gemini API ключ.
+                        </p>
+                      )}
+                      <button onClick={() => handleSearch(currentQuery)} className="px-6 py-2 bg-red-500 text-white rounded-xl text-xs font-black uppercase transition-transform active:scale-95 hover:bg-red-600">Retry</button>
                     </div>
                   )}
 
